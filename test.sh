@@ -1,0 +1,4 @@
+python3 interpolateResonanceShapes_original.py -l inputSamples/inputTestSamples_all.txt -o interpolatedSignalShapes/ResonanceShapes_all.root --interval 1000 --fineBinning
+python3 interpolateResonanceShapes_original.py -l inputSamples/inputTestSamples_sub.txt -o interpolatedSignalShapes/ResonanceShapes_sub.root --interval 1000 --fineBinning
+python3 verifyInterpolation_plotter.py --root1 interpolatedSignalShapes/QstarTo2J_Run3Summer22MiniAODv4_ResonanceShapes_all.root --root2 interpolatedSignalShapes/QstarTo2J_Run3Summer22MiniAODv4_ResonanceShapes_sub.root --results_dir testResults/ --mass 7000 --type qg
+python3 verifyInterpolation_plotter.py --root1 interpolatedSignalShapes/QstarTo2J_Run3Summer22MiniAODv4_ResonanceShapes_all.root --root2 interpolatedSignalShapes/QstarTo2J_Run3Summer22MiniAODv4_ResonanceShapes_sub.root --results_dir testResults/ --mass 2000 --type qg

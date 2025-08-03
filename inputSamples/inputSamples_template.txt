@@ -1,0 +1,12 @@
+# Example list file
+QstarTo2J_Run3Summer22EEMiniAODv4:
+500: /eos/cms/store/user/dagyel/DiJet/rootNTuples_reduced/signalSamples/QstarTo2J/QstarTo2J_M-500_TuneCP5_13p6TeV_pythia8_Run3Summer22EEMiniAODv4/QstarTo2J_n0_reduced_skim.root
+750: /eos/cms/store/user/dagyel/DiJet/rootNTuples_reduced/signalSamples/QstarTo2J/QstarTo2J_M-750_TuneCP5_13p6TeV_pythia8_Run3Summer22EEMiniAODv4/QstarTo2J_n0_reduced_skim.root
+1000: /eos/cms/store/user/dagyel/DiJet/rootNTuples_reduced/signalSamples/QstarTo2J/QstarTo2J_M-1000_TuneCP5_13p6TeV_pythia8_Run3Summer22EEMiniAODv4/QstarTo2J_n0_reduced_skim.root
+
+QstarTo2J_Run3Summer22MiniAODv4:
+500: /eos/cms/store/user/dagyel/DiJet/rootNTuples_reduced/signalSamples/QstarTo2J/QstarTo2J_M-500_TuneCP5_13p6TeV_pythia8_Run3Summer22MiniAODv4/QstarTo2J_n0_reduced_skim.root
+750: /eos/cms/store/user/dagyel/DiJet/rootNTuples_reduced/signalSamples/QstarTo2J/QstarTo2J_M-750_TuneCP5_13p6TeV_pythia8_Run3Summer22MiniAODv4/QstarTo2J_n0_reduced_skim.root
+1000: /eos/cms/store/user/dagyel/DiJet/rootNTuples_reduced/signalSamples/QstarTo2J/QstarTo2J_M-1000_TuneCP5_13p6TeV_pythia8_Run3Summer22MiniAODv4/QstarTo2J_n0_reduced_skim.root
+
+# Add more groups as needed
