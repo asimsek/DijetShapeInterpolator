@@ -60,4 +60,12 @@ python3 verifyInterpolation_plotter.py --root1 interpolatedSignalShapes/QstarTo2
 ```
 
 
+### Signal Shape Plotter: `plotter_signalShapes.py`
+This script overlays normalized \(m_{jj}\) distributions from grouped input lists and saves a PDF/PNG (the output folder is created automatically).
+
+#### Example
+```bash
+python3 plotter_signalShapes.py inputSamples/inputSamples_RSGToQQ_kMpl01.txt --out outputPDFs_signalShapes/RSGToQQ_kMpl01
+```
+
 
