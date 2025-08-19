@@ -10,20 +10,8 @@ import uproot
 import ROOT
 from ROOT import gROOT, gStyle, TCanvas, TH1D, TLegend, TLatex, TGaxis
 
-# -------------------- Input parsing --------------------
 
 def parse_grouped_list(path):
-    """
-    Text format:
-      GroupA:
-      500: /path/a.root
-      1000: /path/b.root
-
-      GroupB:
-      750: /path/c.root
-
-    Returns OrderedDict[str, list[tuple[int,str]]]
-    """
     groups = OrderedDict()
     cur = None
     with open(path, "r") as f:
@@ -40,10 +28,8 @@ def parse_grouped_list(path):
                 groups.setdefault(cur, [])
     return groups
 
-# -------------------- Data --------------------
 
 def read_mjj_filtered(root_path, treepath="rootTupleTree/tree"):
-    """Read mjj with your selection; returns np.array in GeV."""
     try:
         with uproot.open(root_path) as uf:
             utree = uf[treepath]
@@ -66,7 +52,6 @@ def read_mjj_filtered(root_path, treepath="rootTupleTree/tree"):
         sys.stderr.write(f"[WARN] Failed to read {root_path}: {e}\n")
         return np.array([], dtype=np.float64)
 
-# -------------------- ROOT helpers --------------------
 
 def make_hist(name, bin_edges):
     arr = array('d', bin_edges)
@@ -82,15 +67,65 @@ def fill_hist_from_array(h, values_TeV):
     w = array('d', [1.0]*n)
     h.FillN(n, x, w)
 
-# -------------------- Main --------------------
+def normalize_by_bin_width(h, suffix="_density"):
+    out = h.Clone(h.GetName() + suffix)
+    out.SetDirectory(0)
+    nb = out.GetNbinsX()
+    for i in range(1, nb + 1):
+        bw = h.GetBinLowEdge(i+1) - h.GetBinLowEdge(i)
+        c  = h.GetBinContent(i)
+        e  = h.GetBinError(i)
+        if bw > 0.0:
+            out.SetBinContent(i, c / bw)
+            out.SetBinError(i,   e / bw)
+        else:
+            out.SetBinContent(i, 0.0)
+            out.SetBinError(i,   0.0)
+    return out
+
+def build_topright_legend(labels, x2=0.90, y2=0.90, *,
+                          text_size=0.030, font=42,
+                          min_x1=0.40, min_y1=0.50,
+                          min_scale=0.70):
+    """
+    Create a TLegend anchored at (x2,y2) (top-right fixed). It extends left,
+    but if it would cross min_x1, it auto-shrinks text to keep the left gap.
+    """
+    n = len(labels)
+    pad_h   = 0.02
+    pad_w_l = 0.02
+    sample_w = 0.06
+
+    k_char = 0.38
+    max_chars = max((len(txt) for txt, _ in labels), default=0)
+
+    # initial sizing
+    max_text_w = k_char * text_size * max_chars
+
+    row_h = text_size * 1.35
+    leg_h = row_h * n + pad_h
+
+    x1 = max(min_x1, x2 - max_text_w)
+    y1 = max(min_y1, y2 - leg_h)
+
+    leg = ROOT.TLegend(x1, y1, x2, y2)
+    leg.SetTextSize(text_size)
+    leg.SetTextFont(font)
+    leg.SetBorderSize(0)
+    leg.SetFillStyle(0)
+    leg.SetMargin((pad_w_l + sample_w) / max(1e-6, max_text_w))
+    for txt, hobj in labels:
+        leg.AddEntry(hobj, txt, "l")
+    return leg
+
 
 def main():
     p = argparse.ArgumentParser(description="Overlay mjj shapes per file (ROOT HIST).")
     p.add_argument("input", help="Grouped list file")
     p.add_argument("--tree", default="rootTupleTree/tree", help="TTree path")
     p.add_argument("--out", required=True, help="Output folder; last path item is file basename")
-    p.add_argument("--bins", default="auto",
-                   help="Number of bins (int) or 'auto' (global) over [0,11] TeV (default: auto)")
+    p.add_argument("--bins", default="standard",
+        help="Number of bins (int) or 'auto' or 'standard' for dijet mass bins (default: standard)")
     p.add_argument("--logy", action="store_true", help="Log-scale y")
     p.add_argument("--lumi", default="", help="Optional lumi text to prepend on the right")
     args = p.parse_args()
@@ -124,7 +159,7 @@ def main():
 
     # Read data (convert to TeV)
     xlow_TeV, xhigh_TeV = 0.0, 11.0
-    perfile = OrderedDict()  # {group: [(mass, path, mjj_TeV), ...]}
+    perfile = OrderedDict()
     all_vals = []
 
     for gname, items in groups.items():
@@ -137,25 +172,35 @@ def main():
                 all_vals.append(mjj_TeV)
         perfile[gname] = sorted(lst, key=lambda t: t[0])  # sort by mass for consistent overlay order
 
-    # Common bin edges
-    if isinstance(args.bins, str) and args.bins.lower() == "auto":
-        if all_vals:
-            concat = np.concatenate(all_vals)
-            bin_edges = np.histogram_bin_edges(concat, bins="auto", range=(xlow_TeV, xhigh_TeV))
-        else:
-            bin_edges = np.linspace(xlow_TeV, xhigh_TeV, 111)  # fallback: 0.1 TeV bins
+    if args.bins == "standard":
+        binBoundaries = [1, 3, 6, 10, 16, 23, 31, 40, 50, 61, 74, 88, 103, 119, 137, 156, 176, 197, 220, 244, 270, 296, 325,
+                         354, 386, 419, 453, 489, 526, 565, 606, 649, 693, 740, 788, 838, 890, 944, 1000, 1058, 1118, 1181,
+                         1246, 1313, 1383, 1455, 1530, 1607, 1687, 1770, 1856, 1945, 2037, 2132, 2231, 2332, 2438, 2546, 2659,
+                         2775, 2895, 3019, 3147, 3279, 3416, 3558, 3704, 3854, 4010, 4171, 4337, 4509, 4686, 4869, 5058, 5253,
+                         5455, 5663, 5877, 6099, 6328, 6564, 6808, 7060, 7320, 7589, 7866, 8152, 8447, 8752, 9067, 9391, 9726,
+                         10072, 10430, 10798, 11179, 11571, 11977, 12395, 12827, 13272, 13732, 14000]
+        bin_edges = np.array(binBoundaries, dtype=float) / 1000.0
+
     else:
-        try:
-            nbins = int(args.bins)
-            if nbins < 1: raise ValueError
-            bin_edges = np.linspace(xlow_TeV, xhigh_TeV, nbins + 1)
-        except Exception:
-            sys.stderr.write("[WARN] Invalid --bins; using 'auto'.\n")
+        # Auto binning
+        if isinstance(args.bins, str) and args.bins.lower() == "auto":
             if all_vals:
                 concat = np.concatenate(all_vals)
                 bin_edges = np.histogram_bin_edges(concat, bins="auto", range=(xlow_TeV, xhigh_TeV))
             else:
-                bin_edges = np.linspace(xlow_TeV, xhigh_TeV, 111)
+                bin_edges = np.linspace(xlow_TeV, xhigh_TeV, 111)  # fallback: 0.1 TeV bins
+        else:
+            try:
+                nbins = int(args.bins)
+                if nbins < 1: raise ValueError
+                bin_edges = np.linspace(xlow_TeV, xhigh_TeV, nbins + 1)
+            except Exception:
+                sys.stderr.write("[WARN] Invalid --bins; using 'auto'.\n")
+                if all_vals:
+                    concat = np.concatenate(all_vals)
+                    bin_edges = np.histogram_bin_edges(concat, bins="auto", range=(xlow_TeV, xhigh_TeV))
+                else:
+                    bin_edges = np.linspace(xlow_TeV, xhigh_TeV, 111)
 
     # Histogram style
     # Different color for each group; first group solid line, others dashed lines
@@ -173,24 +218,25 @@ def main():
         lstyle = 1 if gi == 0 else 2  # first group solid, others dashed
         glist = []
         for fi, (mass, path, mjj_TeV) in enumerate(items):
-            h = make_hist(f"h_{gi}_{fi}", bin_edges)
+            h_foo = make_hist(f"h_{gi}_{fi}", bin_edges)
             if mjj_TeV.size:
-                fill_hist_from_array(h, mjj_TeV)
+                fill_hist_from_array(h_foo, mjj_TeV)
 
             # normalize EACH distribution to its integral
+            h = normalize_by_bin_width(h_foo)
+            h.SetDirectory(0)
             integ = h.Integral()
-            if integ > 0:
-                h.Scale(1.0 / integ)
+            if integ > 0: h.Scale(1.0 / integ, "width")
             h.SetLineColor(col)
             h.SetLineWidth(2)
-            h.SetLineStyle(lstyle)
-            h.GetXaxis().SetTitle("m_{jj} [TeV]")
+            #h.SetLineStyle(lstyle)
+            h.SetLineStyle(gi+1)
+            h.GetXaxis().SetTitle("Dijet Mass [TeV]")
             h.GetYaxis().SetTitle("Normalized yield / TeV")
-            h.GetYaxis().SetTitleOffset(0.85)
+            h.GetYaxis().SetTitleOffset(0.65)
             h.GetXaxis().SetTitleOffset(1.0)
             #h.GetYaxis().SetNdivisions(505, False)
-            h.GetXaxis().SetNdivisions(511, False)
-            h.GetXaxis().SetRangeUser(0.0, 11.0) 
+            h.GetXaxis().SetNdivisions(515, True)
             h.GetXaxis().SetTickLength(0.02)
             h.GetYaxis().SetTickLength(0.02)
             h.SetMarkerSize(0)
@@ -201,7 +247,7 @@ def main():
     ymax = ymax * 1.30 if ymax > 0 else 1.0
     # Canvas
     can = TCanvas("c", "c", 1600, 1000)
-    can.SetMargin(0.10, 0.02, 0.14, 0.06)  # left, right, bottom, top (more top for CMS text)
+    can.SetMargin(0.08, 0.02, 0.14, 0.06)  # left, right, bottom, top (more top for CMS text)
     if args.logy: can.SetLogy(True)
 
     first_drawn = None
@@ -225,45 +271,36 @@ def main():
                 else:
                     first_drawn.SetMinimum(0.0)
                     first_drawn.SetMaximum(ymax)
-                h.Draw("HIST")
+                first_drawn.GetXaxis().SetRangeUser(0.001, 11)
+                first_drawn.Draw("HIST")
                 first = False
             else:
                 h.Draw("HIST SAME")
 
-    # Legend: **only group names** (one entry per group using the first hist in that group)
-    # --- Right & top-aligned legend (auto height) ---
-    labels = [(gname.replace("_"," "), glist[0])
-              for gname, glist in hists_by_group.items() if glist]
-    n = len(labels)
-
-    text_size = 0.035              
-    row_h    = text_size * 1.35    # approx row height in NDC
-    pad_top  = 0.90                # a bit below the pad top to avoid clipping
-    x2, y2   = 0.90, pad_top       # TOP-RIGHT corner
-    leg_w    = 0.35                # tweak width to taste
-    leg_h    = row_h * n + 0.02    # rows + small padding
-
-    x1 = x2 - leg_w
-    y1 = max(0.50, y2 - leg_h)     # grow downward, don't go below mid-pad
-
-    leg = ROOT.TLegend(x1, y1, x2, y2)  # NDC coords
-    leg.SetTextSize(text_size)
-    leg.SetBorderSize(0)
-    leg.SetFillStyle(0)
-    for lab, h0 in labels:
-        leg.AddEntry(h0, lab, "l")
+    # Legend: top-right fixed, auto-extends left based on text width and row count
+    labels = [(gname.replace("_"," "), glist[0]) for gname, glist in hists_by_group.items() if glist]
+    text_size = 0.030
+    pad_top   = 0.90
+    x2, y2    = 0.90, pad_top
+    leg = build_topright_legend(labels, x2=x2, y2=y2, text_size=text_size, font=42,
+                            min_x1=0.40, min_y1=0.50)
     leg.Draw()
+
 
 
     # CMS Text
     cms = TLatex(); cms.SetNDC(True); cms.SetTextFont(62); cms.SetTextSize(0.060)
     cms.DrawLatex(0.12, 0.87, "CMS")
     pre = TLatex(); pre.SetNDC(True); pre.SetTextFont(52); pre.SetTextSize(0.050)
-    pre.DrawLatex(0.20, 0.87, "Preliminary")
+    pre.DrawLatex(0.12, 0.82, "Simulation Preliminary")
+
+    pad1 = TLatex(); pad1.SetNDC(True); pad1.SetTextFont(42); pad1.SetTextSize(0.035)
+    pad1.DrawLatex(0.80, 0.55, "Wide Jets")
+    pad1.DrawLatex(0.775, 0.51, "|#eta|<2.5, |#Delta#eta|<1.1")
 
     # sqrt(s) text on the far-right of the top margin
-    right = TLatex(); right.SetNDC(True); right.SetTextFont(42); right.SetTextSize(0.040); right.SetTextAlign(31); right.SetTextFont(42)
-    etext = f"{args.lumi},  #sqrt{{s}} = 13.6 TeV" if args.lumi else "#sqrt{s} = 13.6 TeV"
+    right = TLatex(); right.SetNDC(True); right.SetTextFont(42); right.SetTextSize(0.045); right.SetTextAlign(31); right.SetTextFont(42)
+    etext = f"{args.lumi},  13.6 TeV" if args.lumi else "13.6 TeV"
     right.DrawLatex(0.975, 0.950, etext)
 
     can.Update()
